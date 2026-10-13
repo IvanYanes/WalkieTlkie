@@ -131,7 +131,6 @@
         socket.on('connect', () => {
             connectionStatus.innerText = "Estado: Conectado (En línea)";
             connectionStatus.style.color = "#a6e3a1";
-            // Enviamos nuestro nombre al servidor al conectarnos
             socket.emit('register-username', username);
         });
 
@@ -140,7 +139,6 @@
             connectionStatus.style.color = "#f38ba8";
         });
 
-        // Escuchar la lista actualizada de usuarios conectados
         socket.on('update-user-list', (users) => {
             usersList.innerHTML = '';
             users.forEach(user => {
@@ -245,12 +243,14 @@
         talkBtn.addEventListener('touchstart', startRecording);
         talkBtn.addEventListener('touchend', stopRecording);
 
-        // ESCUCHAR AUDIO ENTRANTE
+        // ESCUCHAR AUDIO ENTRANTE (Receptor flexible con compatibilidad cruzada)
         socket.on('voice-message', (data) => {
-            console.log(`Audio recibido de: ${data.username}`);
+            console.log(`Audio recibido de: ${data.username} [Tipo: ${data.mimeType}]`);
             statusText.innerText = `Recibiendo de ${data.username}...`;
             
-            const blob = new Blob([data.audioBuffer]);
+            // Si el emisor envió un tipo MIME válido, lo respetamos; si viene vacío, dejamos que el navegador lo interprete libremente
+            const blobOptions = data.mimeType ? { type: data.mimeType } : {};
+            const blob = new Blob([data.audioBuffer], blobOptions);
             const audioUrl = URL.createObjectURL(blob);
             
             audioPlayer.src = audioUrl;
