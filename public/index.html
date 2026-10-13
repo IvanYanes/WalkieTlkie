@@ -19,7 +19,13 @@
         }
 
         h1 {
+            margin-bottom: 5px;
+        }
+
+        #userDisplay {
             margin-bottom: 20px;
+            font-size: 14px;
+            color: #f38ba8;
         }
 
         #talkBtn {
@@ -53,6 +59,8 @@
 <body>
 
     <h1>Walkie-Talkie</h1>
+    <p id="userDisplay">Conectando...</p>
+    
     <button id="talkBtn">PRESIONA PARA HABLAR</button>
     <p id="status">Toca el botón para activar el audio</p>
 
@@ -65,17 +73,25 @@
         const socket = io();
         const talkBtn = document.getElementById('talkBtn');
         const statusText = document.getElementById('status');
+        const userDisplay = document.getElementById('userDisplay');
         const audioPlayer = document.getElementById('audioPlayer');
+
+        // Pedir nombre de usuario al entrar a la página
+        let username = prompt("Ingresa tu nombre para el Walkie-Talkie:", "Iván");
+        if (!username || username.trim() === "") {
+            username = "Anónimo_" + Math.floor(Math.random() * 1000);
+        }
+        userDisplay.innerText = `Usuario: ${username}`;
 
         let mediaRecorder;
         let audioChunks = [];
 
-        // Solicitamos acceso al micrófono pidiendo máxima ganancia y cancelación de ruido
+        // Solicitamos acceso al micrófono
         navigator.mediaDevices.getUserMedia({ 
             audio: {
                 echoCancellation: true,
                 noiseSuppression: true,
-                autoGainControl: true // <-- Esto sube automáticamente el volumen si hablas bajo
+                autoGainControl: true
             } 
         })
         .then(stream => {
@@ -99,7 +115,11 @@
                 audioChunks = [];
                 
                 audioBlob.arrayBuffer().then(buffer => {
-                    socket.emit('voice-message', buffer);
+                    // Enviamos un objeto con el nombre y el buffer de audio
+                    socket.emit('voice-message', {
+                        username: username,
+                        audioBuffer: buffer
+                    });
                     statusText.innerText = "Mensaje enviado";
                     setTimeout(() => statusText.innerText = "Listo para transmitir", 1500);
                 });
@@ -113,7 +133,6 @@
         // Eventos para presionar y soltar
         const startRecording = (e) => {
             e.preventDefault();
-            // Desbloqueo de audio obligatorio en móviles
             if (audioPlayer.paused) {
                 audioPlayer.play().then(() => audioPlayer.pause()).catch(() => {});
             }
@@ -122,7 +141,7 @@
                 audioChunks = [];
                 mediaRecorder.start();
                 statusText.innerText = "Transmitiendo...";
-                talkBtn.style.backgroundColor = #2ecc71;
+                talkBtn.style.backgroundColor = "#2ecc71";
             }
         };
 
@@ -130,7 +149,7 @@
             e.preventDefault();
             if (mediaRecorder && mediaRecorder.state === "recording") {
                 mediaRecorder.stop();
-                talkBtn.style.backgroundColor = #e74c3c;
+                talkBtn.style.backgroundColor = "#e74c3c";
             }
         };
 
@@ -139,16 +158,16 @@
         talkBtn.addEventListener('touchstart', startRecording);
         talkBtn.addEventListener('touchend', stopRecording);
 
-        // ESCUCHAR AUDIO ENTRANTE Y SUBIR VOLUMEN AL MÁXIMO
-        socket.on('voice-message', (audioBuffer) => {
-            console.log("¡Audio recibido del servidor!", audioBuffer);
-            statusText.innerText = "Recibiendo audio...";
+        // ESCUCHAR AUDIO ENTRANTE
+        socket.on('voice-message', (data) => {
+            console.log(`Audio recibido de: ${data.username}`);
+            statusText.innerText = `Recibiendo de ${data.username}...`;
             
-            const blob = new Blob([audioBuffer], { type: 'audio/webm' });
+            const blob = new Blob([data.audioBuffer], { type: 'audio/webm' });
             const audioUrl = URL.createObjectURL(blob);
             
             audioPlayer.src = audioUrl;
-            audioPlayer.volume = 1.0; // Forzar volumen al 100%
+            audioPlayer.volume = 1.0;
             
             audioPlayer.play()
                 .then(() => {

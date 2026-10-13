@@ -12,9 +12,12 @@ app.use(express.static('public'));
 io.on('connection', (socket) => {
     console.log('Un usuario se ha conectado:', socket.id);
 
-    // Cuando un usuario envía un mensaje de voz, se reenvía a todos los demás conectados
-    socket.on('voice-message', (audioBuffer) => {
-        socket.broadcast.emit('voice-message', audioBuffer);
+    // Recibimos un objeto { username, audioBuffer } desde el cliente
+    socket.on('voice-message', (data) => {
+        console.log(`[AUDIO] Mensaje recibido de: ${data.username} (${socket.id})`);
+        
+        // Reenviamos el mensaje a todos los demás conectados
+        socket.broadcast.emit('voice-message', data);
     });
 
     socket.on('disconnect', () => {
