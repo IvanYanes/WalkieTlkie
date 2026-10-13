@@ -244,19 +244,21 @@
         talkBtn.addEventListener('touchend', stopRecording);
 
         // ESCUCHAR AUDIO ENTRANTE (Receptor flexible con compatibilidad cruzada)
+        // ESCUCHAR AUDIO ENTRANTE (Receptor robusto que limpia la memoria para evitar bloqueos)
         socket.on('voice-message', (data) => {
             console.log(`Audio recibido de: ${data.username} [Tipo: ${data.mimeType}]`);
             statusText.innerText = `Recibiendo de ${data.username}...`;
             
-            // Si el emisor envió un tipo MIME válido, lo respetamos; si viene vacío, dejamos que el navegador lo interprete libremente
+            // Creamos el blob con el tipo que trae el emisor
             const blobOptions = data.mimeType ? { type: data.mimeType } : {};
             const blob = new Blob([data.audioBuffer], blobOptions);
             const audioUrl = URL.createObjectURL(blob);
             
-            audioPlayer.src = audioUrl;
-            audioPlayer.volume = 1.0;
+            // Creamos un elemento de audio nuevo cada vez para evitar que el navegador cachee o bloquee el anterior
+            const dynamicAudio = new Audio(audioUrl);
+            dynamicAudio.volume = 1.0;
             
-            audioPlayer.play()
+            dynamicAudio.play()
                 .then(() => {
                     setTimeout(() => statusText.innerText = "Listo para transmitir", 2000);
                 })
