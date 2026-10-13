@@ -23,9 +23,15 @@
         }
 
         #userDisplay {
-            margin-bottom: 20px;
+            margin-bottom: 5px;
             font-size: 14px;
             color: #f38ba8;
+        }
+
+        #connectionStatus {
+            margin-bottom: 20px;
+            font-size: 12px;
+            color: #a6adc8;
         }
 
         #talkBtn {
@@ -60,6 +66,7 @@
 
     <h1>Walkie-Talkie</h1>
     <p id="userDisplay">Conectando...</p>
+    <p id="connectionStatus">Estado: Conectando a la red...</p>
     
     <button id="talkBtn">PRESIONA PARA HABLAR</button>
     <p id="status">Toca el botón para activar el audio</p>
@@ -74,6 +81,7 @@
         const talkBtn = document.getElementById('talkBtn');
         const statusText = document.getElementById('status');
         const userDisplay = document.getElementById('userDisplay');
+        const connectionStatus = document.getElementById('connectionStatus');
         const audioPlayer = document.getElementById('audioPlayer');
 
         let username = prompt("Ingresa tu nombre para el Walkie-Talkie:", "Iván");
@@ -82,9 +90,34 @@
         }
         userDisplay.innerText = `Usuario: ${username}`;
 
+        socket.on('connect', () => {
+            connectionStatus.innerText = "Estado: Conectado (En línea)";
+            connectionStatus.style.color = "#a6e3a1";
+        });
+
+        socket.on('disconnect', () => {
+            connectionStatus.innerText = "Estado: Desconectado (Reconectando...)";
+            connectionStatus.style.color = "#f38ba8";
+        });
+
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    const wakeLock = await navigator.wakeLock.request('screen');
+                    document.addEventListener('visibilitychange', async () => {
+                        if (wakeLock !== null && document.visibilityState === 'visible') {
+                            await navigator.wakeLock.request('screen');
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error(`${err.name}, ${err.message}`);
+            }
+        }
+
         let mediaRecorder;
         let audioChunks = [];
-        let recordedMimeType = 'audio/webm'; // Tipo por defecto
+        let recordedMimeType = '';
 
         navigator.mediaDevices.getUserMedia({ 
             audio: {
@@ -95,8 +128,9 @@
         })
         .then(stream => {
             statusText.innerText = "Listo para transmitir";
+            requestWakeLock();
 
-            // Detectamos automáticamente el mejor formato que soporte el dispositivo actual
+            // Buscamos un formato compatible con el dispositivo actual
             const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
             for (let type of types) {
                 if (MediaRecorder.isTypeSupported(type)) {
@@ -105,7 +139,8 @@
                 }
             }
 
-            mediaRecorder = new MediaRecorder(stream, { mimeType: recordedMimeType });
+            const recorderOptions = recordedMimeType ? { mimeType: recordedMimeType } : {};
+            mediaRecorder = new MediaRecorder(stream, recorderOptions);
 
             mediaRecorder.ondataavailable = event => {
                 if (event.data.size > 0) {
@@ -114,14 +149,15 @@
             };
 
             mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: recordedMimeType });
+                const blobOptions = recordedMimeType ? { type: recordedMimeType } : {};
+                const audioBlob = new Blob(audioChunks, blobOptions);
                 audioChunks = [];
                 
                 audioBlob.arrayBuffer().then(buffer => {
                     socket.emit('voice-message', {
                         username: username,
                         audioBuffer: buffer,
-                        mimeType: recordedMimeType // Enviamos también el tipo de formato usado
+                        mimeType: recordedMimeType
                     });
                     statusText.innerText = "Mensaje enviado";
                     setTimeout(() => statusText.innerText = "Listo para transmitir", 1500);
@@ -160,13 +196,13 @@
         talkBtn.addEventListener('touchstart', startRecording);
         talkBtn.addEventListener('touchend', stopRecording);
 
-        // ESCUCHAR AUDIO ENTRANTE ADAPTANDO EL FORMATO
+        // ESCUCHAR AUDIO ENTRANTE SIN RESTRINGIR TIPO (Dejar que el navegador decodifique)
         socket.on('voice-message', (data) => {
-            console.log(`Audio recibido de: ${data.username} [${data.mimeType}]`);
+            console.log(`Audio recibido de: ${data.username}`);
             statusText.innerText = `Recibiendo de ${data.username}...`;
             
-            // Usamos el formato exacto con el que fue grabado en el dispositivo origen
-            const blob = new Blob([data.audioBuffer], { type: data.mimeType || 'audio/webm' });
+            // Creamos el blob sin especificar un tipo estricto para que el elemento audio lo interprete libremente
+            const blob = new Blob([data.audioBuffer]);
             const audioUrl = URL.createObjectURL(blob);
             
             audioPlayer.src = audioUrl;
