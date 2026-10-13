@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Walkie-Talkie</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 20px; }
+        #status { margin-bottom: 30px; font-size: 1rem; color: #aaa; }
+        #pttButton {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background-color: #ff4757;
+            color: white;
+            border: none;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0px 8px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.1s ease;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #pttButton:active, #pttButton.active {
+            background-color: #ff6b81;
+            transform: scale(0.95);
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Walkie-Talkie Privado</h1>
+    <div id="status">Desconectado</div>
+    <button id="pttButton">MANTÉN PRESIONADO PARA HABLAR</button>
+
+    <!-- Script de Socket.io -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const statusDiv = document.getElementById('status');
+        const pttButton = document.getElementById('pttButton');
+
+        let mediaRecorder;
+        let audioChunks = [];
+
+        socket.on('connect', () => {
+            statusDiv.textContent = 'Conectado. Listo para hablar.';
+            statusDiv.style.color = '#2ed573';
+        });
+
+        // Configurar permisos de micrófono al cargar
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+            mediaRecorder = new MediaRecorder(stream);
+
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    audioChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                socket.emit('voice-message', audioBlob);
+                audioChunks = [];
+                statusDiv.textContent = 'Audio enviado.';
+            };
+        }).catch(err => {
+            statusDiv.textContent = 'Error: Permiso de micrófono denegado.';
+            statusDiv.style.color = '#ff4757';
+        });
+
+        // Eventos para mantener presionado (funciona en táctil y PC)
+        const startRecording = (e) => {
+            e.preventDefault();
+            if (mediaRecorder && mediaRecorder.state === "inactive") {
+                audioChunks = [];
+                mediaRecorder.start();
+                statusDiv.textContent = 'Transmitiendo voz...';
+                pttButton.classList.add('active');
+            }
+        };
+
+        const stopRecording = (e) => {
+            e.preventDefault();
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                statusDiv.textContent = 'Escucha o espera...';
+                pttButton.classList.remove('active');
+            }
+        };
+
+        // Eventos táctiles para celulares
+        pttButton.addEventListener('touchstart', startRecording);
+        pttButton.addEventListener('touchend', stopRecording);
+
+        // Eventos de mouse por si lo pruebas en PC
+        pttButton.addEventListener('mousedown', startRecording);
+        pttButton.addEventListener('mouseup', stopRecording);
+
+        // Reproducir el audio cuando llega del servidor
+        socket.on('voice-message', (audioBuffer) => {
+            statusDiv.textContent = 'Recibiendo audio...';
+            const blob = new Blob([audioBuffer], { type: 'audio/webm' });
+            const audioUrl = URL.createObjectURL(blob);
+            const audio = new Audio(audioUrl);
+            audio.play().then(() => {
+                statusDiv.textContent = 'Listo para hablar.';
+            }).catch(e => console.log("Error al reproducir:", e));
+        });
+    </script>
+</body>
+</html>
