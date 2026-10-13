@@ -56,12 +56,16 @@
     <button id="talkBtn">PRESIONA PARA HABLAR</button>
     <p id="status">Mantén presionado para transmitir</p>
 
+    <!-- Reproductor de audio invisible para asegurar compatibilidad móvil -->
+    <audio id="audioPlayer" style="display: none;"></audio>
+
     <!-- Librería cliente de Socket.io -->
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
         const talkBtn = document.getElementById('talkBtn');
         const statusText = document.getElementById('status');
+        const audioPlayer = document.getElementById('audioPlayer');
 
         let mediaRecorder;
         let audioChunks = [];
@@ -73,7 +77,6 @@
 
                 const options = { mimeType: 'audio/webm;codecs=opus' };
                 if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                    console.warn('audio/webm;codecs=opus no soportado, usando formato por defecto');
                     mediaRecorder = new MediaRecorder(stream);
                 } else {
                     mediaRecorder = new MediaRecorder(stream, options);
@@ -104,6 +107,11 @@
         // Eventos para presionar y soltar
         const startRecording = (e) => {
             e.preventDefault();
+            // Desbloqueo de audio obligatorio en móviles al tocar el botón principal
+            if (audioPlayer.paused) {
+                audioPlayer.play().then(() => audioPlayer.pause()).catch(() => {});
+            }
+
             if (mediaRecorder && mediaRecorder.state === "inactive") {
                 audioChunks = [];
                 mediaRecorder.start();
@@ -125,21 +133,22 @@
         talkBtn.addEventListener('touchstart', startRecording);
         talkBtn.addEventListener('touchend', stopRecording);
 
-        // ESCUCHAR AUDIO ENTRANTE CON LOGS
+        // ESCUCHAR AUDIO ENTRANTE
         socket.on('voice-message', (audioBuffer) => {
             console.log("¡Audio recibido del servidor!", audioBuffer);
             statusText.innerText = "Recibiendo audio...";
+            
             const blob = new Blob([audioBuffer], { type: 'audio/webm' });
             const audioUrl = URL.createObjectURL(blob);
-            const audio = new Audio(audioUrl);
-
-            audio.play()
+            
+            audioPlayer.src = audioUrl;
+            audioPlayer.play()
                 .then(() => {
                     setTimeout(() => statusText.innerText = "Listo para transmitir", 2000);
                 })
                 .catch(err => {
-                    console.error("El navegador bloqueó la reproducción automática:", err);
-                    statusText.innerText = "Haz un clic en la pantalla para activar el audio";
+                    console.error("Error al reproducir:", err);
+                    statusText.innerText = "Toca el botón para permitir audio";
                 });
         });
     </script>
