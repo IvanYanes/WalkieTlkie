@@ -71,7 +71,6 @@
             .then(stream => {
                 statusText.innerText = "Listo para transmitir";
 
-                // Forzamos un tipo y códec compatible universalmente (Opus)
                 const options = { mimeType: 'audio/webm;codecs=opus' };
                 if (!MediaRecorder.isTypeSupported(options.mimeType)) {
                     console.warn('audio/webm;codecs=opus no soportado, usando formato por defecto');
@@ -102,7 +101,7 @@
                 statusText.innerText = "Error: Permite el acceso al micrófono";
             });
 
-        // Eventos para presionar y soltar (funciona en PC y Celular)
+        // Eventos para presionar y soltar
         const startRecording = (e) => {
             e.preventDefault();
             if (mediaRecorder && mediaRecorder.state === "inactive") {
@@ -126,8 +125,9 @@
         talkBtn.addEventListener('touchstart', startRecording);
         talkBtn.addEventListener('touchend', stopRecording);
 
-        // ESCUCHAR AUDIO ENTRANTE
+        // ESCUCHAR AUDIO ENTRANTE CON LOGS
         socket.on('voice-message', (audioBuffer) => {
+            console.log("¡Audio recibido del servidor!", audioBuffer);
             statusText.innerText = "Recibiendo audio...";
             const blob = new Blob([audioBuffer], { type: 'audio/webm' });
             const audioUrl = URL.createObjectURL(blob);
