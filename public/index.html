@@ -76,7 +76,6 @@
         const userDisplay = document.getElementById('userDisplay');
         const audioPlayer = document.getElementById('audioPlayer');
 
-        // Pedir nombre de usuario al entrar a la página
         let username = prompt("Ingresa tu nombre para el Walkie-Talkie:", "Iván");
         if (!username || username.trim() === "") {
             username = "Anónimo_" + Math.floor(Math.random() * 1000);
@@ -85,8 +84,8 @@
 
         let mediaRecorder;
         let audioChunks = [];
+        let recordedMimeType = 'audio/webm'; // Tipo por defecto
 
-        // Solicitamos acceso al micrófono
         navigator.mediaDevices.getUserMedia({ 
             audio: {
                 echoCancellation: true,
@@ -97,12 +96,16 @@
         .then(stream => {
             statusText.innerText = "Listo para transmitir";
 
-            const options = { mimeType: 'audio/webm;codecs=opus' };
-            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                mediaRecorder = new MediaRecorder(stream);
-            } else {
-                mediaRecorder = new MediaRecorder(stream, options);
+            // Detectamos automáticamente el mejor formato que soporte el dispositivo actual
+            const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+            for (let type of types) {
+                if (MediaRecorder.isTypeSupported(type)) {
+                    recordedMimeType = type;
+                    break;
+                }
             }
+
+            mediaRecorder = new MediaRecorder(stream, { mimeType: recordedMimeType });
 
             mediaRecorder.ondataavailable = event => {
                 if (event.data.size > 0) {
@@ -111,14 +114,14 @@
             };
 
             mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                const audioBlob = new Blob(audioChunks, { type: recordedMimeType });
                 audioChunks = [];
                 
                 audioBlob.arrayBuffer().then(buffer => {
-                    // Enviamos un objeto con el nombre y el buffer de audio
                     socket.emit('voice-message', {
                         username: username,
-                        audioBuffer: buffer
+                        audioBuffer: buffer,
+                        mimeType: recordedMimeType // Enviamos también el tipo de formato usado
                     });
                     statusText.innerText = "Mensaje enviado";
                     setTimeout(() => statusText.innerText = "Listo para transmitir", 1500);
@@ -130,7 +133,6 @@
             statusText.innerText = "Error: Permite el acceso al micrófono";
         });
 
-        // Eventos para presionar y soltar
         const startRecording = (e) => {
             e.preventDefault();
             if (audioPlayer.paused) {
@@ -158,12 +160,13 @@
         talkBtn.addEventListener('touchstart', startRecording);
         talkBtn.addEventListener('touchend', stopRecording);
 
-        // ESCUCHAR AUDIO ENTRANTE
+        // ESCUCHAR AUDIO ENTRANTE ADAPTANDO EL FORMATO
         socket.on('voice-message', (data) => {
-            console.log(`Audio recibido de: ${data.username}`);
+            console.log(`Audio recibido de: ${data.username} [${data.mimeType}]`);
             statusText.innerText = `Recibiendo de ${data.username}...`;
             
-            const blob = new Blob([data.audioBuffer], { type: 'audio/webm' });
+            // Usamos el formato exacto con el que fue grabado en el dispositivo origen
+            const blob = new Blob([data.audioBuffer], { type: data.mimeType || 'audio/webm' });
             const audioUrl = URL.createObjectURL(blob);
             
             audioPlayer.src = audioUrl;
