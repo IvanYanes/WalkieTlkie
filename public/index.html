@@ -71,7 +71,14 @@
             .then(stream => {
                 statusText.innerText = "Listo para transmitir";
 
-                mediaRecorder = new MediaRecorder(stream);
+                // Forzamos un tipo y códec compatible universalmente (Opus)
+                const options = { mimeType: 'audio/webm;codecs=opus' };
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    console.warn('audio/webm;codecs=opus no soportado, usando formato por defecto');
+                    mediaRecorder = new MediaRecorder(stream);
+                } else {
+                    mediaRecorder = new MediaRecorder(stream, options);
+                }
 
                 mediaRecorder.ondataavailable = event => {
                     if (event.data.size > 0) {
@@ -80,7 +87,6 @@
                 };
 
                 mediaRecorder.onstop = () => {
-                    // Creamos el blob de audio y lo enviamos al servidor
                     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     audioChunks = [];
                     
@@ -120,7 +126,7 @@
         talkBtn.addEventListener('touchstart', startRecording);
         talkBtn.addEventListener('touchend', stopRecording);
 
-        // ESCUCHAR AUDIO ENTRANTE DEL OTRO USUARIO
+        // ESCUCHAR AUDIO ENTRANTE
         socket.on('voice-message', (audioBuffer) => {
             statusText.innerText = "Recibiendo audio...";
             const blob = new Blob([audioBuffer], { type: 'audio/webm' });

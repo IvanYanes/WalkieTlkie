@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Walkie-Talkie</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #1e1e2e;
+            color: #ffffff;
+            user-select: none;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        #talkBtn {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            border: none;
+            background-color: #e74c3c;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.4);
+            transition: transform 0.1s, background-color 0.2s;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #talkBtn:active {
+            transform: scale(0.95);
+            background-color: #c0392b;
+        }
+
+        #status {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #a6adc8;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Walkie-Talkie</h1>
+    <button id="talkBtn">PRESIONA PARA HABLAR</button>
+    <p id="status">Mantén presionado para transmitir</p>
+
+    <!-- Librería cliente de Socket.io -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const talkBtn = document.getElementById('talkBtn');
+        const statusText = document.getElementById('status');
+
+        let mediaRecorder;
+        let audioChunks = [];
+
+        // Solicitamos acceso al micrófono al cargar la página
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                statusText.innerText = "Listo para transmitir";
+
+                mediaRecorder = new MediaRecorder(stream);
+
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    // Creamos el blob de audio y lo enviamos al servidor
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    audioChunks = [];
+                    
+                    audioBlob.arrayBuffer().then(buffer => {
+                        socket.emit('voice-message', buffer);
+                        statusText.innerText = "Mensaje enviado";
+                        setTimeout(() => statusText.innerText = "Listo para transmitir", 1500);
+                    });
+                };
+            })
+            .catch(err => {
+                console.error("Error al acceder al micrófono:", err);
+                statusText.innerText = "Error: Permite el acceso al micrófono";
+            });
+
+        // Eventos para presionar y soltar (funciona en PC y Celular)
+        const startRecording = (e) => {
+            e.preventDefault();
+            if (mediaRecorder && mediaRecorder.state === "inactive") {
+                audioChunks = [];
+                mediaRecorder.start();
+                statusText.innerText = "Transmitiendo...";
+                talkBtn.style.backgroundColor = "#2ecc71";
+            }
+        };
+
+        const stopRecording = (e) => {
+            e.preventDefault();
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                talkBtn.style.backgroundColor = "#e74c3c";
+            }
+        };
+
+        talkBtn.addEventListener('mousedown', startRecording);
+        talkBtn.addEventListener('mouseup', stopRecording);
+        talkBtn.addEventListener('touchstart', startRecording);
+        talkBtn.addEventListener('touchend', stopRecording);
+
+        // ESCUCHAR AUDIO ENTRANTE DEL OTRO USUARIO
+        socket.on('voice-message', (audioBuffer) => {
+            statusText.innerText = "Recibiendo audio...";
+            const blob = new Blob([audioBuffer], { type: 'audio/webm' });
+            const audioUrl = URL.createObjectURL(blob);
+            const audio = new Audio(audioUrl);
+
+            audio.play()
+                .then(() => {
+                    setTimeout(() => statusText.innerText = "Listo para transmitir", 2000);
+                })
+                .catch(err => {
+                    console.error("El navegador bloqueó la reproducción automática:", err);
+                    statusText.innerText = "Haz un clic en la pantalla para activar el audio";
+                });
+        });
+    </script>
+</body>
+</html>
